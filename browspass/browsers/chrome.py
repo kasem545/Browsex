@@ -1,6 +1,5 @@
 """Chrome password extraction and decryption."""
 
-
 from browspass.browsers.chromium import ChromiumDecryptor
 
 

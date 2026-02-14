@@ -10,7 +10,7 @@ from pathlib import Path
 import orjson
 
 from browspass.browsers import Brave, Chrome, Edge, FirefoxDecryptor, Opera
-from browspass.models import LoginEntry
+from browspass.models import BookmarkEntry, HistoryEntry, LoginEntry
 
 logger = logging.getLogger(__name__)
 
@@ -47,31 +47,91 @@ def setup_logging(verbose: bool) -> None:
     )
 
 
-def format_json(logins: list[LoginEntry]) -> str:
-    return orjson.dumps(
-        [login.to_dict() for login in logins], option=orjson.OPT_INDENT_2
-    ).decode("utf-8")
+def format_json(
+    logins: list[LoginEntry] | None = None,
+    bookmarks: list[BookmarkEntry] | None = None,
+    history: list[HistoryEntry] | None = None,
+) -> str:
+    data: dict[str, list[dict[str, str | int | None]]] = {}
+    if logins:
+        data["logins"] = [login.to_dict() for login in logins]
+    if bookmarks:
+        data["bookmarks"] = [bookmark.to_dict() for bookmark in bookmarks]
+    if history:
+        data["history"] = [entry.to_dict() for entry in history]
+    return orjson.dumps(data, option=orjson.OPT_INDENT_2).decode("utf-8")
 
 
-def format_csv(logins: list[LoginEntry]) -> str:
-    if not logins:
-        return ""
-
+def format_csv(
+    logins: list[LoginEntry] | None = None,
+    bookmarks: list[BookmarkEntry] | None = None,
+    history: list[HistoryEntry] | None = None,
+) -> str:
     output = StringIO()
-    fieldnames = ["origin_url", "username", "password", "date_created", "times_used"]
-    writer = csv.DictWriter(output, fieldnames=fieldnames)
-    writer.writeheader()
-    for login in logins:
-        writer.writerow(login.to_dict())
+
+    if logins:
+        fieldnames = [
+            "origin_url",
+            "username",
+            "password",
+            "date_created",
+            "times_used",
+        ]
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        for login in logins:
+            writer.writerow(login.to_dict())
+        output.write("\n")
+
+    if bookmarks:
+        fieldnames = ["url", "title", "date_added", "folder"]
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        for bookmark in bookmarks:
+            writer.writerow(bookmark.to_dict())
+        output.write("\n")
+
+    if history:
+        fieldnames = ["url", "title", "visit_count", "last_visit_time"]
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        for entry in history:
+            writer.writerow(entry.to_dict())
+
     return output.getvalue()
 
 
-def format_text(logins: list[LoginEntry]) -> str:
+def format_text(
+    logins: list[LoginEntry] | None = None,
+    bookmarks: list[BookmarkEntry] | None = None,
+    history: list[HistoryEntry] | None = None,
+) -> str:
     lines = []
-    for login in logins:
-        lines.append(f"\nURL: {login.origin_url}")
-        lines.append(f"Username: {login.username}")
-        lines.append(f"Password: {login.password}")
+
+    if logins:
+        lines.append("\n=== PASSWORDS ===")
+        for login in logins:
+            lines.append(f"\nURL: {login.origin_url}")
+            lines.append(f"Username: {login.username}")
+            lines.append(f"Password: {login.password}")
+
+    if bookmarks:
+        lines.append("\n\n=== BOOKMARKS ===")
+        for bookmark in bookmarks:
+            lines.append(f"\nTitle: {bookmark.title}")
+            lines.append(f"URL: {bookmark.url}")
+            if bookmark.folder:
+                lines.append(f"Folder: {bookmark.folder}")
+
+    if history:
+        lines.append("\n\n=== HISTORY ===")
+        for entry in history:
+            lines.append(f"\nURL: {entry.url}")
+            if entry.title:
+                lines.append(f"Title: {entry.title}")
+            if entry.visit_count:
+                lines.append(f"Visits: {entry.visit_count}")
+
     return "\n".join(lines)
 
 
@@ -80,23 +140,33 @@ def handle_firefox(args: Namespace) -> int:
 
     try:
         decryptor = FirefoxDecryptor(profile_path, args.master_password or "")
-        logins = decryptor.extract_logins()
 
-        if not logins:
-            logger.warning("No logins found")
+        logins = None
+        bookmarks = None
+        history = None
+
+        if args.passwords:
+            logins = decryptor.extract_logins()
+        if args.bookmarks:
+            bookmarks = decryptor.extract_bookmarks()
+        if args.history:
+            history = decryptor.extract_history()
+
+        if not any([logins, bookmarks, history]):
+            logger.warning("No data found")
             return 0
 
         if args.format == "json":
-            print(format_json(logins))
+            print(format_json(logins, bookmarks, history))
         elif args.format == "csv":
-            print(format_csv(logins))
+            print(format_csv(logins, bookmarks, history))
         else:
-            print(format_text(logins))
+            print(format_text(logins, bookmarks, history))
 
         return 0
 
     except Exception as e:
-        logger.error("Firefox decryption failed: %s", e)
+        logger.error("Firefox extraction failed: %s", e)
         if args.verbose:
             raise
         return 1
@@ -107,23 +177,33 @@ def handle_chromium(args: Namespace, browser_class: type) -> int:
 
     try:
         decryptor = browser_class(profile_path)
-        logins = decryptor.extract_logins()
 
-        if not logins:
-            logger.warning("No logins found")
+        logins = None
+        bookmarks = None
+        history = None
+
+        if args.passwords:
+            logins = decryptor.extract_logins()
+        if args.bookmarks:
+            bookmarks = decryptor.extract_bookmarks()
+        if args.history:
+            history = decryptor.extract_history()
+
+        if not any([logins, bookmarks, history]):
+            logger.warning("No data found")
             return 0
 
         if args.format == "json":
-            print(format_json(logins))
+            print(format_json(logins, bookmarks, history))
         elif args.format == "csv":
-            print(format_csv(logins))
+            print(format_csv(logins, bookmarks, history))
         else:
-            print(format_text(logins))
+            print(format_text(logins, bookmarks, history))
 
         return 0
 
     except Exception as e:
-        logger.error("%s decryption failed: %s", browser_class.__name__, e)
+        logger.error("%s extraction failed: %s", browser_class.__name__, e)
         if args.verbose:
             raise
         return 1
@@ -142,7 +222,7 @@ def main() -> int:
     subparsers = parser.add_subparsers(dest="browser", required=False)
 
     auto_parser = subparsers.add_parser(
-        "auto", help="Auto-detect browser and extract passwords"
+        "auto", help="Auto-detect browser and extract data"
     )
     auto_parser.add_argument(
         "-p",
@@ -163,8 +243,28 @@ def main() -> int:
         default="text",
         help="Output format (default: text)",
     )
+    auto_parser.add_argument(
+        "--passwords",
+        action="store_true",
+        help="Extract passwords",
+    )
+    auto_parser.add_argument(
+        "--bookmarks",
+        action="store_true",
+        help="Extract bookmarks",
+    )
+    auto_parser.add_argument(
+        "--history",
+        action="store_true",
+        help="Extract history",
+    )
+    auto_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Extract all data types",
+    )
 
-    firefox_parser = subparsers.add_parser("firefox", help="Extract Firefox passwords")
+    firefox_parser = subparsers.add_parser("firefox", help="Extract Firefox data")
     firefox_parser.add_argument(
         "-p",
         "--profile-path",
@@ -184,6 +284,26 @@ def main() -> int:
         default="text",
         help="Output format (default: text)",
     )
+    firefox_parser.add_argument(
+        "--passwords",
+        action="store_true",
+        help="Extract passwords",
+    )
+    firefox_parser.add_argument(
+        "--bookmarks",
+        action="store_true",
+        help="Extract bookmarks",
+    )
+    firefox_parser.add_argument(
+        "--history",
+        action="store_true",
+        help="Extract history",
+    )
+    firefox_parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Extract all data types",
+    )
 
     for browser_name, browser_class in [
         ("chrome", Chrome),
@@ -192,7 +312,7 @@ def main() -> int:
         ("opera", Opera),
     ]:
         browser_parser = subparsers.add_parser(
-            browser_name, help=f"Extract {browser_name.capitalize()} passwords"
+            browser_name, help=f"Extract {browser_name.capitalize()} data"
         )
         browser_parser.add_argument(
             "-p",
@@ -206,6 +326,26 @@ def main() -> int:
             choices=["text", "json", "csv"],
             default="text",
             help="Output format (default: text)",
+        )
+        browser_parser.add_argument(
+            "--passwords",
+            action="store_true",
+            help="Extract passwords",
+        )
+        browser_parser.add_argument(
+            "--bookmarks",
+            action="store_true",
+            help="Extract bookmarks",
+        )
+        browser_parser.add_argument(
+            "--history",
+            action="store_true",
+            help="Extract history",
+        )
+        browser_parser.add_argument(
+            "--all",
+            action="store_true",
+            help="Extract all data types",
         )
         browser_parser.set_defaults(browser_class=browser_class)
 
@@ -223,6 +363,13 @@ def main() -> int:
     if not args.browser:
         parser.print_help()
         return 1
+
+    if args.all:
+        args.passwords = True
+        args.bookmarks = True
+        args.history = True
+    elif not any([args.passwords, args.bookmarks, args.history]):
+        args.passwords = True
 
     if args.browser == "firefox":
         return handle_firefox(args)

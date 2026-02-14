@@ -1,5 +1,6 @@
 """Base class for Chromium-based browser password extraction."""
 
+import json
 import logging
 import platform
 import shutil
@@ -16,7 +17,7 @@ from browspass.crypto.os_crypt import (
     get_macos_key,
     get_windows_key,
 )
-from browspass.models import LoginEntry
+from browspass.models import BookmarkEntry, HistoryEntry, LoginEntry
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,14 @@ class ChromiumDecryptor(ABC):
     @property
     def local_state_path(self) -> Path:
         return self.profile_path.parent / "Local State"
+
+    @property
+    def bookmarks_path(self) -> Path:
+        return self.profile_path / "Bookmarks"
+
+    @property
+    def history_path(self) -> Path:
+        return self.profile_path / "History"
 
     @property
     @abstractmethod
@@ -101,9 +110,7 @@ class ChromiumDecryptor(ABC):
 
     def extract_logins(self) -> list[LoginEntry]:
         if not self.login_data_path.exists():
-            raise FileNotFoundError(
-                f"Login Data not found at {self.login_data_path}"
-            )
+            raise FileNotFoundError(f"Login Data not found at {self.login_data_path}")
 
         with tempfile.NamedTemporaryFile(delete=False) as temp_file:
             temp_db_path = temp_file.name
@@ -120,7 +127,13 @@ class ChromiumDecryptor(ABC):
 
                 results: list[LoginEntry] = []
                 for row in cursor:
-                    origin_url, username, encrypted_password, date_created, times_used = row
+                    (
+                        origin_url,
+                        username,
+                        encrypted_password,
+                        date_created,
+                        times_used,
+                    ) = row
 
                     if not encrypted_password:
                         continue
@@ -143,6 +156,94 @@ class ChromiumDecryptor(ABC):
 
                 logger.info("Successfully decrypted %d logins", len(results))
                 return results
+
+        finally:
+            Path(temp_db_path).unlink(missing_ok=True)
+
+    def extract_bookmarks(self) -> list[BookmarkEntry]:
+        if not self.bookmarks_path.exists():
+            logger.warning("Bookmarks file not found at %s", self.bookmarks_path)
+            return []
+
+        try:
+            data: dict[str, object] = json.loads(
+                self.bookmarks_path.read_text(encoding="utf-8")
+            )
+            results: list[BookmarkEntry] = []
+
+            def parse_bookmarks(node: dict[str, object], folder: str = "") -> None:
+                if "children" in node:
+                    children = node["children"]
+                    if isinstance(children, list):
+                        for child in children:
+                            if isinstance(child, dict):
+                                name = node.get("name")
+                                folder_name = name if isinstance(name, str) else folder
+                                parse_bookmarks(child, folder_name)
+                elif node.get("type") == "url":
+                    url = node.get("url")
+                    title = node.get("name")
+                    date_added = node.get("date_added")
+                    results.append(
+                        BookmarkEntry(
+                            url=url if isinstance(url, str) else "",
+                            title=title if isinstance(title, str) else "",
+                            date_added=date_added
+                            if isinstance(date_added, int)
+                            else None,
+                            folder=folder,
+                        )
+                    )
+
+            if "roots" in data:
+                roots = data["roots"]
+                if isinstance(roots, dict):
+                    for root_key, root_node in roots.items():
+                        if isinstance(root_node, dict):
+                            parse_bookmarks(root_node, root_key)
+
+            logger.info("Successfully extracted %d bookmarks", len(results))
+            return results
+
+        except Exception as e:
+            logger.error("Failed to extract bookmarks: %s", e)
+            return []
+
+    def extract_history(self) -> list[HistoryEntry]:
+        if not self.history_path.exists():
+            logger.warning("History file not found at %s", self.history_path)
+            return []
+
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            temp_db_path = temp_file.name
+
+        try:
+            shutil.copy2(self.history_path, temp_db_path)
+
+            with sqlite3.connect(temp_db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT url, title, visit_count, last_visit_time FROM urls"
+                )
+
+                results: list[HistoryEntry] = []
+                for row in cursor:
+                    url, title, visit_count, last_visit_time = row
+                    results.append(
+                        HistoryEntry(
+                            url=url,
+                            title=title,
+                            visit_count=visit_count,
+                            last_visit_time=last_visit_time,
+                        )
+                    )
+
+                logger.info("Successfully extracted %d history entries", len(results))
+                return results
+
+        except Exception as e:
+            logger.error("Failed to extract history: %s", e)
+            return []
 
         finally:
             Path(temp_db_path).unlink(missing_ok=True)

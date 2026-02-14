@@ -2,13 +2,15 @@
 
 import logging
 import sqlite3
+import tempfile
 from base64 import b64decode
 from pathlib import Path
+from shutil import copy2
 
 import orjson
 
 from browspass.crypto.nss_crypto import decrypt_login_field, decrypt_pbe
-from browspass.models import LoginEntry
+from browspass.models import BookmarkEntry, HistoryEntry, LoginEntry
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,10 @@ class FirefoxDecryptor:
     @property
     def logins_path(self) -> Path:
         return self.profile_path / "logins.json"
+
+    @property
+    def places_path(self) -> Path:
+        return self.profile_path / "places.sqlite"
 
     def _extract_master_key(self) -> bytes:
         if not self.key_db_path.exists():
@@ -115,3 +121,89 @@ class FirefoxDecryptor:
 
         logger.info("Successfully decrypted %d/%d logins", len(results), len(logins))
         return results
+
+    def extract_bookmarks(self) -> list[BookmarkEntry]:
+        if not self.places_path.exists():
+            logger.warning("places.sqlite not found at %s", self.places_path)
+            return []
+
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            temp_db_path = temp_file.name
+
+        try:
+            copy2(self.places_path, temp_db_path)
+
+            with sqlite3.connect(temp_db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT p.url, b.title, b.dateAdded, b.parent "
+                    "FROM moz_bookmarks b "
+                    "JOIN moz_places p ON b.fk = p.id "
+                    "WHERE b.type = 1 AND p.url IS NOT NULL"
+                )
+
+                results: list[BookmarkEntry] = []
+                for row in cursor:
+                    url, title, date_added, parent_id = row
+                    results.append(
+                        BookmarkEntry(
+                            url=url,
+                            title=title or "",
+                            date_added=date_added,
+                            folder=str(parent_id) if parent_id else None,
+                        )
+                    )
+
+                logger.info("Successfully extracted %d bookmarks", len(results))
+                return results
+
+        except Exception as e:
+            logger.error("Failed to extract bookmarks: %s", e)
+            return []
+
+        finally:
+            Path(temp_db_path).unlink(missing_ok=True)
+
+    def extract_history(self) -> list[HistoryEntry]:
+        if not self.places_path.exists():
+            logger.warning("places.sqlite not found at %s", self.places_path)
+            return []
+
+        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+            temp_db_path = temp_file.name
+
+        try:
+            copy2(self.places_path, temp_db_path)
+
+            with sqlite3.connect(temp_db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT p.url, p.title, COUNT(v.id) as visit_count, "
+                    "MAX(v.visit_date) as last_visit_time "
+                    "FROM moz_places p "
+                    "LEFT JOIN moz_historyvisits v ON p.id = v.place_id "
+                    "WHERE p.url IS NOT NULL "
+                    "GROUP BY p.id"
+                )
+
+                results: list[HistoryEntry] = []
+                for row in cursor:
+                    url, title, visit_count, last_visit_time = row
+                    results.append(
+                        HistoryEntry(
+                            url=url,
+                            title=title,
+                            visit_count=visit_count or 0,
+                            last_visit_time=last_visit_time,
+                        )
+                    )
+
+                logger.info("Successfully extracted %d history entries", len(results))
+                return results
+
+        except Exception as e:
+            logger.error("Failed to extract history: %s", e)
+            return []
+
+        finally:
+            Path(temp_db_path).unlink(missing_ok=True)

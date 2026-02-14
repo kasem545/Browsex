@@ -110,8 +110,8 @@ def decrypt_pbe(
         return result
 
     try:
-        decoded = der_decoder.decode(asn1_data)[0]
-        oid = str(decoded[0][0][0])
+        decoded_item = der_decoder.decode(asn1_data)
+        oid = str(decoded_item[0][0][0])
     except Exception as e:
         logger.debug("ASN.1 decoding failed: %s", e)
         logger.warning(
@@ -122,21 +122,21 @@ def decrypt_pbe(
         raise ValueError("Unable to decrypt PBE data: ASN.1 decoding failed") from e
 
     if oid == OID_PBE_SHA1_3DES:
-        entry_salt = decoded[0][0][1][0].asOctets()
-        ciphertext = decoded[0][1].asOctets()
+        entry_salt = decoded_item[0][0][1][0].asOctets()
+        ciphertext = decoded_item[0][1].asOctets()
         plaintext = decrypt_3des_cbc(global_salt, password, entry_salt, ciphertext)
         return plaintext, oid
 
     if oid == OID_PBES2:
-        pbkdf2_params = decoded[0][0][1][0][1]
+        pbkdf2_params = decoded_item[0][0][1][0][1]
         entry_salt = pbkdf2_params[0].asOctets()
         iterations = int(pbkdf2_params[1])
         key_length = int(pbkdf2_params[2])
 
-        aes_params = decoded[0][0][1][1]
+        aes_params = decoded_item[0][0][1][1]
         iv = b"\x04\x0e" + aes_params[1].asOctets()
 
-        ciphertext = decoded[0][1].asOctets()
+        ciphertext = decoded_item[0][1].asOctets()
 
         k_intermediate = sha1(global_salt + password).digest()
         key = pbkdf2_hmac("sha256", k_intermediate, entry_salt, iterations, key_length)
@@ -161,10 +161,10 @@ def decrypt_login_field(encrypted_data: bytes, master_key: bytes) -> str:
         return plaintext.decode("utf-8", errors="replace")
 
     try:
-        decoded = der_decoder.decode(encrypted_data)[0]
-        oid = str(decoded[0][1][0])
-        iv = decoded[0][1][1].asOctets()
-        ciphertext = decoded[0][2].asOctets()
+        login_data = der_decoder.decode(encrypted_data)
+        oid = str(login_data[0][1][0])
+        iv = login_data[0][1][1].asOctets()
+        ciphertext = login_data[0][2].asOctets()
     except Exception as e:
         logger.debug("ASN.1 decoding failed: %s", e)
         logger.warning(
