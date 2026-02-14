@@ -2,7 +2,7 @@
 name = "browsex"
 version = "1.0.0"
 description = "Multi-browser password extraction and decryption tool supporting Chrome, Brave, Edge, Opera, and Firefox"
-authors = [{name = "Your Name", email = "your.email@example.com"}]
+authors = [{name = "Kasem545", email = "kasem545@proton.me"}]
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
