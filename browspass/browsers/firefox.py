@@ -1,5 +1,6 @@
 """Firefox password extraction and decryption."""
 
+import contextlib
 import logging
 import sqlite3
 import tempfile
@@ -8,6 +9,8 @@ from pathlib import Path
 from shutil import copy2
 
 import orjson
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import unpad
 
 from browspass.crypto.nss_crypto import decrypt_login_field, decrypt_pbe
 from browspass.models import BookmarkEntry, HistoryEntry, LoginEntry
@@ -79,6 +82,9 @@ class FirefoxDecryptor:
             final_key, _ = decrypt_pbe(
                 master_key_data, self.master_password, global_salt
             )
+
+            with contextlib.suppress(ValueError):
+                final_key = unpad(final_key, AES.block_size)
 
             logger.info("Master key extracted: %s", final_key.hex()[:32] + "...")
             return final_key
