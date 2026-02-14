@@ -37,8 +37,24 @@ def get_linux_key(
     try:
         import secretstorage  # type: ignore[import-not-found]
     except ImportError:
-        logger.debug("secretstorage not available, using default key")
+        logger.warning(
+            "secretstorage not installed - cannot decrypt Chrome v80+ passwords. "
+            "Install with: pip install secretstorage"
+        )
+        if local_state_path and local_state_path.exists():
+            try:
+                local_state = json.loads(local_state_path.read_bytes())
+                if local_state.get("os_crypt", {}).get("encrypted_key"):
+                    logger.error(
+                        "Local State contains encrypted_key but secretstorage is not available. "
+                        "Cannot decrypt passwords without secretstorage on Linux."
+                    )
+                    return None
+            except Exception:
+                pass
+
         key = pbkdf2_hmac("sha1", password, b"saltysalt", 1, 16)
+        logger.info("Using PBKDF2-derived key with default password (legacy Chrome)")
         return key
 
     try:
