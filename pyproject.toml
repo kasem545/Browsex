@@ -9,6 +9,7 @@ dependencies = [
     "pycryptodome>=3.20.0",
     "pyasn1>=0.6.0",
     "orjson>=3.10.0",
+    "secretstorage>=3.3.0",
 ]
 
 [project.optional-dependencies]
