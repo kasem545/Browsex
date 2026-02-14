@@ -67,7 +67,7 @@ class ChromiumDecryptor(ABC):
                 raise ValueError("Failed to extract macOS Keychain key")
             return key
         elif system == "Linux":
-            key = get_linux_key(self.keychain_service_name)
+            key = get_linux_key(self.keychain_service_name, self.local_state_path)
             if not key:
                 raise ValueError("Failed to extract Linux libsecret key")
             return key
