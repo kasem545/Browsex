@@ -1,6 +1,5 @@
 """Firefox password extraction and decryption."""
 
-import contextlib
 import logging
 import sqlite3
 import tempfile
@@ -9,8 +8,6 @@ from pathlib import Path
 from shutil import copy2
 
 import orjson
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import unpad
 
 from browspass.crypto.nss_crypto import decrypt_login_field, decrypt_pbe
 from browspass.models import BookmarkEntry, HistoryEntry, LoginEntry
@@ -70,23 +67,45 @@ class FirefoxDecryptor:
             logger.info("Master password verified")
 
             cursor.execute("SELECT a11, a102 FROM nssPrivate;")
-            master_key_data = None
+
+            master_key_candidates = []
             for row in cursor:
                 if row[1] == CKA_ID:
-                    master_key_data = row[0]
-                    break
+                    master_key_candidates.append(row[0])
 
-            if not master_key_data:
+            if not master_key_candidates:
                 raise ValueError("Master key not found in nssPrivate table")
 
+            logger.debug("Found %d master key candidate(s)", len(master_key_candidates))
+
+            for i, master_key_data in enumerate(master_key_candidates):
+                final_key, algo = decrypt_pbe(
+                    master_key_data, self.master_password, global_salt
+                )
+                logger.debug(
+                    "Master key candidate %d (algo: %s): %s (length: %d bytes)",
+                    i,
+                    algo,
+                    final_key.hex()[:64] + "...",
+                    len(final_key),
+                )
+
+            if len(master_key_candidates) > 1:
+                final_key_48, _ = decrypt_pbe(
+                    master_key_candidates[-1], self.master_password, global_salt
+                )
+                if len(final_key_48) == 48:
+                    logger.info("Using 48-byte master key for AES-256-CBC")
+                    return final_key_48
+
             final_key, _ = decrypt_pbe(
-                master_key_data, self.master_password, global_salt
+                master_key_candidates[0], self.master_password, global_salt
             )
-
-            with contextlib.suppress(ValueError):
-                final_key = unpad(final_key, AES.block_size)
-
-            logger.info("Master key extracted: %s", final_key.hex()[:32] + "...")
+            logger.info(
+                "Master key extracted: %s (length: %d bytes)",
+                final_key.hex()[:64] + "...",
+                len(final_key),
+            )
             return final_key
 
     @property
@@ -109,15 +128,20 @@ class FirefoxDecryptor:
         results: list[LoginEntry] = []
         for entry in logins:
             try:
-                username_encrypted = b64decode(entry["encryptedUsername"])
-                password_encrypted = b64decode(entry["encryptedPassword"])
+                username = ""
+                password = ""
 
-                username = decrypt_login_field(username_encrypted, self.master_key)
-                password = decrypt_login_field(password_encrypted, self.master_key)
+                if "encryptedUsername" in entry and entry["encryptedUsername"]:
+                    username_encrypted = b64decode(entry["encryptedUsername"])
+                    username = decrypt_login_field(username_encrypted, self.master_key)
+
+                if "encryptedPassword" in entry and entry["encryptedPassword"]:
+                    password_encrypted = b64decode(entry["encryptedPassword"])
+                    password = decrypt_login_field(password_encrypted, self.master_key)
 
                 results.append(
                     LoginEntry(
-                        origin_url=entry["hostname"],
+                        origin_url=entry.get("hostname", "Unknown"),
                         username=username,
                         password=password,
                     )
