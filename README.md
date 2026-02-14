@@ -52,72 +52,105 @@ uv pip install -e ".[windows,macos,linux]"
 
 ## Usage
 
+### ⚠️ Important Requirements
+
+**Chromium Browsers (Chrome, Brave, Edge, Opera)**:
+- Password extraction **requires** `-k/--masterkey` flag with 64-byte hex DPAPI masterkey
+- Bookmarks and history do NOT require `-k` flag
+- See [CROSS_PLATFORM_DPAPI.md](CROSS_PLATFORM_DPAPI.md) for masterkey extraction methods
+
+**Firefox**:
+- No `-k` flag needed (uses NSS crypto)
+- Master password required if set: `-m "password"`
+
+**All Browsers**:
+- Must specify at least one data type: `--passwords`, `--bookmarks`, `--history`, or `--all`
+
 ### Data Type Flags
 
 Extract different types of data from browsers:
 
-- `--passwords` - Extract saved passwords (default if no flags specified)
-- `--bookmarks` - Extract bookmarks
-- `--history` - Extract browsing history
-- `--all` - Extract all data types
+- `--passwords` - Extract saved passwords (**requires -k for Chromium browsers**)
+- `--bookmarks` - Extract bookmarks (no -k needed)
+- `--history` - Extract browsing history (no -k needed)
+- `--all` - Extract all data types (**requires -k for Chromium browsers**)
 
 **You can combine multiple flags:**
 
 ```bash
-# Extract passwords and bookmarks
-browsex chrome -p /path --passwords --bookmarks
+# Bookmarks and history (no -k needed)
+browsex chrome -p /path --bookmarks --history
 
-# Extract all data types
-browsex chrome -p /path --all
+# Passwords and bookmarks (requires -k for Chrome)
+browsex chrome -p /path --passwords --bookmarks -k <masterkey>
 
-# Extract only history
+# Extract only history (no -k needed)
 browsex firefox -p /path --history
 ```
 
 ### Chrome
 
-```bash
-# Passwords only (default)
-browsex chrome -p ~/.config/google-chrome/Default
+**IMPORTANT**: Chrome password extraction requires `-k/--masterkey` flag for decryption.
 
-# Bookmarks only
+```bash
+# Bookmarks only (no -k required)
 browsex chrome -p ~/.config/google-chrome/Default --bookmarks
 
-# Everything as JSON
-browsex chrome -p ~/.config/google-chrome/Default --all -f json
+# History only (no -k required)
+browsex chrome -p ~/.config/google-chrome/Default --history
 
-# Passwords and history as CSV
-browsex chrome -p ~/.config/google-chrome/Default --passwords --history -f csv
+# Passwords (requires -k masterkey)
+browsex chrome -p ~/.config/google-chrome/Default --passwords -k <64_byte_hex_masterkey>
 
-# Windows example
-browsex chrome -p "%LOCALAPPDATA%\Google\Chrome\User Data\Default" --all
+# Everything including passwords (requires -k)
+browsex chrome -p ~/.config/google-chrome/Default --all -k <masterkey>
 
-# Cross-platform: Decrypt Windows profile on Linux (requires DPAPI masterkey)
+# Cross-platform: Decrypt Windows profile on Linux
 browsex chrome -p "User Data/Default" --passwords -k 1a2b3c4d5e6f...64byte_hex
 
 # Save results to file
-browsex chrome -p ~/.config/google-chrome/Default --all -f json -o passwords.json
+browsex chrome -p ~/.config/google-chrome/Default --all -k <masterkey> -f json -o passwords.json
 ```
+
+**Note**: Bookmarks and history do NOT require `-k` flag. Only passwords require decryption keys.
 
 ### Brave
 
+**IMPORTANT**: Brave password extraction requires `-k/--masterkey` flag.
+
 ```bash
-browsex brave -p /path/to/brave/profile --passwords --bookmarks
-browsex brave -p /path/to/brave/profile --all -f json -o brave_data.json
+# Bookmarks/history only (no -k needed)
+browsex brave -p /path/to/brave/profile --bookmarks
+
+# Passwords require -k masterkey
+browsex brave -p /path/to/brave/profile --passwords -k <masterkey>
+
+# Everything with -k
+browsex brave -p /path/to/brave/profile --all -k <masterkey> -f json -o brave_data.json
 ```
 
 ### Microsoft Edge
 
+**IMPORTANT**: Edge password extraction requires `-k/--masterkey` flag.
+
 ```bash
+# Bookmarks only (no -k needed)
 browsex edge -p /path/to/edge/profile --bookmarks
-browsex edge -p /path/to/edge/profile --all -f csv
+
+# Passwords require -k masterkey
+browsex edge -p /path/to/edge/profile --all -k <masterkey> -f csv
 ```
 
 ### Opera
 
+**IMPORTANT**: Opera password extraction requires `-k/--masterkey` flag.
+
 ```bash
+# History only (no -k needed)
 browsex opera -p /path/to/opera/profile --history
-browsex opera -p /path/to/opera/profile --passwords --bookmarks
+
+# Passwords require -k masterkey
+browsex opera -p /path/to/opera/profile --passwords -k <masterkey>
 ```
 
 ### Firefox
@@ -152,12 +185,14 @@ browsex auto -p /path/to/profile --passwords --bookmarks -f json
 - `-f, --format {text|json|csv}`: Output format (default: text)
 - `-o, --output FILE`: Output file path (default: print to stdout)
 - `-m, --master-password PASSWORD`: Firefox master password (if set)
-- `-k, --masterkey HEX`: DPAPI masterkey for cross-platform Windows profile decryption
-- `--passwords`: Extract passwords (default if no data flags specified)
-- `--bookmarks`: Extract bookmarks
-- `--history`: Extract browsing history
-- `--all`: Extract all data types
+- `-k, --masterkey HEX`: **REQUIRED** for Chrome/Brave/Edge/Opera password extraction (DPAPI masterkey)
+- `--passwords`: Extract passwords (**requires -k for Chromium browsers**)
+- `--bookmarks`: Extract bookmarks (no -k needed)
+- `--history`: Extract browsing history (no -k needed)
+- `--all`: Extract all data types (**requires -k for Chromium browsers**)
 - `-v, --verbose`: Enable verbose logging
+
+**Important**: At least one data type flag (--passwords, --bookmarks, --history, or --all) is required.
 
 ## Finding Browser Profile Paths
 

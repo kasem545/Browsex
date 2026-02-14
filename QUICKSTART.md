@@ -18,36 +18,54 @@ uv pip install -e ".[macos]"  # macOS
 
 ## Basic Usage
 
-### Extract Passwords (Default)
+### ⚠️ Important: Chromium Browsers Require -k for Passwords
+
+**Chrome, Brave, Edge, Opera** password extraction requires `-k` masterkey flag.  
+**Firefox** does not require `-k` (uses NSS crypto).
+
+### Extract Passwords
 
 ```bash
-# Chrome (Linux)
-browsex chrome -p ~/.config/google-chrome/Default
+# Chrome - REQUIRES -k masterkey for passwords
+browsex chrome -p ~/.config/google-chrome/Default --passwords -k <64_byte_hex_masterkey>
 
-# Firefox (with master password)
-browsex firefox -p ~/.mozilla/firefox/xxx.default-release -m "password"
+# Firefox - no -k needed
+browsex firefox -p ~/.mozilla/firefox/xxx.default-release -m "password" --passwords
+```
 
-# Auto-detect browser
-browsex auto -p /path/to/profile
+### Extract Bookmarks/History (No -k Needed)
+
+```bash
+# Chrome bookmarks - NO -k required
+browsex chrome -p ~/.config/google-chrome/Default --bookmarks
+
+# Chrome history - NO -k required
+browsex chrome -p ~/.config/google-chrome/Default --history
+
+# Combine bookmarks and history
+browsex chrome -p /path --bookmarks --history
 ```
 
 ### Extract Multiple Data Types
 
 ```bash
-# Passwords + Bookmarks
-browsex chrome -p /path --passwords --bookmarks
+# Passwords + Bookmarks (requires -k for Chrome)
+browsex chrome -p /path --passwords --bookmarks -k <masterkey>
 
-# Everything
-browsex chrome -p /path --all
+# Everything including passwords (requires -k)
+browsex chrome -p /path --all -k <masterkey>
 ```
 
 ### Save to File
 
 ```bash
-# Save as JSON
-browsex chrome -p /path --all -f json -o results.json
+# Save bookmarks as JSON (no -k needed)
+browsex chrome -p /path --bookmarks -f json -o bookmarks.json
 
-# Save as CSV
+# Save everything as JSON (requires -k for passwords)
+browsex chrome -p /path --all -k <masterkey> -f json -o results.json
+
+# Firefox save to CSV
 browsex firefox -p /path --all -f csv -o data.csv
 ```
 

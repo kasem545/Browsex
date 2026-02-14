@@ -436,8 +436,24 @@ def main() -> int:
         args.passwords = True
         args.bookmarks = True
         args.history = True
-    elif not any([args.passwords, args.bookmarks, args.history]):
-        args.passwords = True
+
+    if not any([args.passwords, args.bookmarks, args.history]):
+        logger.error(
+            "No data type specified. Use --passwords, --bookmarks, --history, or --all"
+        )
+        return 1
+
+    if args.browser in ("chrome", "brave", "edge", "opera"):
+        masterkey = getattr(args, "masterkey", None)
+        if (args.passwords or args.all) and not masterkey:
+            logger.error(
+                "%s password extraction requires -k/--masterkey flag for decryption",
+                args.browser.capitalize(),
+            )
+            logger.error(
+                "Use --bookmarks or --history only (no -k needed), or provide -k for passwords"
+            )
+            return 1
 
     if args.browser == "firefox":
         return handle_firefox(args)
