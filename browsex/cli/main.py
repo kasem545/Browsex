@@ -9,8 +9,8 @@ from pathlib import Path
 
 import orjson
 
-from browspass.browsers import Brave, Chrome, Edge, FirefoxDecryptor, Opera
-from browspass.models import BookmarkEntry, HistoryEntry, LoginEntry
+from browsex.browsers import Brave, Chrome, Edge, FirefoxDecryptor, Opera
+from browsex.models import BookmarkEntry, HistoryEntry, LoginEntry
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ def detect_browser_from_path(profile_path: Path) -> str | None:
         if profiles:
             logger.warning("Available profiles: %s", ", ".join(profiles))
             logger.warning(
-                "Example: browspass chrome -p '%s/%s'", profile_path, profiles[0]
+                "Example: browsex chrome -p '%s/%s'", profile_path, profiles[0]
             )
         return None
 
@@ -186,11 +186,18 @@ def handle_firefox(args: Namespace) -> int:
             return 0
 
         if args.format == "json":
-            print(format_json(logins, bookmarks, history))
+            output = format_json(logins, bookmarks, history)
         elif args.format == "csv":
-            print(format_csv(logins, bookmarks, history))
+            output = format_csv(logins, bookmarks, history)
         else:
-            print(format_text(logins, bookmarks, history))
+            output = format_text(logins, bookmarks, history)
+
+        if args.output:
+            output_path = Path(args.output)
+            output_path.write_text(output, encoding="utf-8")
+            logger.info("Results written to: %s", output_path)
+        else:
+            print(output)
 
         return 0
 
@@ -203,9 +210,10 @@ def handle_firefox(args: Namespace) -> int:
 
 def handle_chromium(args: Namespace, browser_class: type) -> int:
     profile_path = Path(args.profile_path)
+    masterkey = getattr(args, "masterkey", None)
 
     try:
-        decryptor = browser_class(profile_path)
+        decryptor = browser_class(profile_path, masterkey)
 
         logins = None
         bookmarks = None
@@ -223,11 +231,18 @@ def handle_chromium(args: Namespace, browser_class: type) -> int:
             return 0
 
         if args.format == "json":
-            print(format_json(logins, bookmarks, history))
+            output = format_json(logins, bookmarks, history)
         elif args.format == "csv":
-            print(format_csv(logins, bookmarks, history))
+            output = format_csv(logins, bookmarks, history)
         else:
-            print(format_text(logins, bookmarks, history))
+            output = format_text(logins, bookmarks, history)
+
+        if args.output:
+            output_path = Path(args.output)
+            output_path.write_text(output, encoding="utf-8")
+            logger.info("Results written to: %s", output_path)
+        else:
+            print(output)
 
         return 0
 
@@ -241,7 +256,7 @@ def handle_chromium(args: Namespace, browser_class: type) -> int:
 def main() -> int:
     parser = ArgumentParser(
         description="Extract and decrypt browser passwords",
-        prog="browspass",
+        prog="browsex",
     )
 
     parser.add_argument(
@@ -292,6 +307,12 @@ def main() -> int:
         action="store_true",
         help="Extract all data types",
     )
+    auto_parser.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="Output file path (default: print to stdout)",
+    )
 
     firefox_parser = subparsers.add_parser("firefox", help="Extract Firefox data")
     firefox_parser.add_argument(
@@ -332,6 +353,12 @@ def main() -> int:
         "--all",
         action="store_true",
         help="Extract all data types",
+    )
+    firefox_parser.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="Output file path (default: print to stdout)",
     )
 
     for browser_name, browser_class in [
@@ -375,6 +402,18 @@ def main() -> int:
             "--all",
             action="store_true",
             help="Extract all data types",
+        )
+        browser_parser.add_argument(
+            "-k",
+            "--masterkey",
+            default=None,
+            help="DPAPI masterkey (64-byte hex) for cross-platform decryption of Windows profiles",
+        )
+        browser_parser.add_argument(
+            "-o",
+            "--output",
+            default=None,
+            help="Output file path (default: print to stdout)",
         )
         browser_parser.set_defaults(browser_class=browser_class)
 

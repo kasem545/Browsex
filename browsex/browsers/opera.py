@@ -1,6 +1,6 @@
 """Opera browser password extraction and decryption."""
 
-from browspass.browsers.chromium import ChromiumDecryptor
+from browsex.browsers.chromium import ChromiumDecryptor
 
 
 class Opera(ChromiumDecryptor):

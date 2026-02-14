@@ -12,13 +12,13 @@ from pathlib import Path
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 
-from browspass.crypto.os_crypt import (
+from browsex.crypto.os_crypt import (
     get_linux_key,
     get_macos_key,
     get_windows_key,
 )
-from browspass.models import BookmarkEntry, HistoryEntry, LoginEntry
-from browspass.utils import find_chrome_local_state, find_file
+from browsex.models import BookmarkEntry, HistoryEntry, LoginEntry
+from browsex.utils import find_chrome_local_state, find_file
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +30,9 @@ class ChromiumDecryptor(ABC):
     for Chrome, Brave, Edge, and Opera browsers.
     """
 
-    def __init__(self, profile_path: Path) -> None:
+    def __init__(self, profile_path: Path, masterkey: str | None = None) -> None:
         self.profile_path = profile_path
+        self.masterkey = masterkey
         self._decryption_key: bytes | None = None
         self._login_data_path: Path | None = None
         self._local_state_path: Path | None = None
@@ -107,8 +108,20 @@ class ChromiumDecryptor(ABC):
 
     def _get_decryption_key(self) -> bytes:
         system = platform.system()
+
+        if self.masterkey:
+            logger.info("Using provided DPAPI masterkey for cross-platform decryption")
+            key = get_windows_key(self.local_state_path, self.masterkey)
+            if not key:
+                raise ValueError(
+                    "Failed to decrypt with provided masterkey.\n"
+                    "Ensure the masterkey matches the Windows user who created this profile.\n"
+                    "Extract masterkey with: mimikatz # sekurlsa::dpapi"
+                )
+            return key
+
         if system == "Windows":
-            key = get_windows_key(self.local_state_path)
+            key = get_windows_key(self.local_state_path, None)
             if not key:
                 raise ValueError(
                     "Failed to extract Windows DPAPI key. "
@@ -130,7 +143,8 @@ class ChromiumDecryptor(ABC):
                     "Failed to extract Linux decryption key.\n"
                     "Chrome v80+ requires secretstorage to decrypt passwords.\n"
                     "Install with: pip install secretstorage\n"
-                    'Or install all dependencies: pip install -e ".[linux]"'
+                    'Or install all dependencies: pip install -e ".[linux]"\n\n'
+                    "For Windows profiles on Linux, use: --masterkey <hex>"
                 )
             return key
         else:

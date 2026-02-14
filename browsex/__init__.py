@@ -1,6 +1,6 @@
 """Browser password decryption library."""
 
-from browspass.browsers import (
+from browsex.browsers import (
     Brave,
     Chrome,
     ChromiumDecryptor,
@@ -8,7 +8,7 @@ from browspass.browsers import (
     FirefoxDecryptor,
     Opera,
 )
-from browspass.models import LoginEntry
+from browsex.models import LoginEntry
 
 __version__ = "0.1.0"
 

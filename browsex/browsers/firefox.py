@@ -9,9 +9,9 @@ from shutil import copy2
 
 import orjson
 
-from browspass.crypto.nss_crypto import decrypt_login_field, decrypt_pbe
-from browspass.models import BookmarkEntry, HistoryEntry, LoginEntry
-from browspass.utils import find_file
+from browsex.crypto.nss_crypto import decrypt_login_field, decrypt_pbe
+from browsex.models import BookmarkEntry, HistoryEntry, LoginEntry
+from browsex.utils import find_file
 
 logger = logging.getLogger(__name__)
 

@@ -1,6 +1,6 @@
 """Utility modules for browser data extraction."""
 
-from browspass.utils.file_finder import (
+from browsex.utils.file_finder import (
     find_chrome_local_state,
     find_file,
     find_profile_directory,

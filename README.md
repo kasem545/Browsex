@@ -1,4 +1,4 @@
-# Browspass - Multi-Browser Password Decryption Tool
+# Browsex - Multi-Browser Password Extraction Tool
 
 **WARNING: This tool is intended for legitimate password recovery and forensic analysis ONLY. Use responsibly and legally.**
 
@@ -9,12 +9,16 @@ Comprehensive multi-browser password extraction and decryption utility supportin
 ## Features
 
 - **5 Browsers Supported**: Chrome, Brave, Edge, Opera, Firefox
+- **3 Data Types**: Passwords, Bookmarks, Browsing History
+- **Flexible Extraction**: Extract single or multiple data types with flags
 - **Encryption Support**:
   - Chrome v10/v11 (AES-256-GCM with nonce/tag)
   - Chrome DPAPI (pre-v80 legacy support)
   - Chrome v20 (App-Bound Encryption)
+  - Firefox v10/v11 (modern binary format)
   - Firefox 3DES-CBC and AES-256-CBC (PBES2)
 - **Cross-Platform**: Windows (DPAPI), macOS (Keychain), Linux (libsecret/secretstorage)
+- **Auto-Detection**: Automatically detect browser from profile path
 - **Clean Architecture**: Modular crypto layer, browser-specific implementations, unified CLI
 - **Type-Safe**: 100% mypy strict compliance with full type hints
 - **Multiple Output Formats**: text, JSON, CSV
@@ -23,8 +27,8 @@ Comprehensive multi-browser password extraction and decryption utility supportin
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/Extract-Browspass.git
-cd Extract-Browspass
+git clone https://github.com/yourusername/Extract-Browsex.git
+cd Extract-Browsex
 
 # Create virtual environment
 uv venv
@@ -37,55 +41,122 @@ uv pip install -e ".[windows]"
 # On macOS:
 uv pip install -e ".[macos]"
 
-# On Linux:
+# On Linux (REQUIRED for Chrome v80+ password decryption):
 uv pip install -e ".[linux]"
 
 # Or install all dependencies:
 uv pip install -e ".[windows,macos,linux]"
 ```
 
+**⚠️ Linux Users**: Chrome v80+ requires `secretstorage` to decrypt passwords. If you see "secretstorage not installed" errors, see [INSTALL_LINUX.md](INSTALL_LINUX.md) for detailed troubleshooting.
+
 ## Usage
+
+### Data Type Flags
+
+Extract different types of data from browsers:
+
+- `--passwords` - Extract saved passwords (default if no flags specified)
+- `--bookmarks` - Extract bookmarks
+- `--history` - Extract browsing history
+- `--all` - Extract all data types
+
+**You can combine multiple flags:**
+
+```bash
+# Extract passwords and bookmarks
+browsex chrome -p /path --passwords --bookmarks
+
+# Extract all data types
+browsex chrome -p /path --all
+
+# Extract only history
+browsex firefox -p /path --history
+```
 
 ### Chrome
 
 ```bash
-browspass chrome -p /path/to/chrome/profile
-browspass chrome -p /path/to/chrome/profile -f json
+# Passwords only (default)
+browsex chrome -p ~/.config/google-chrome/Default
+
+# Bookmarks only
+browsex chrome -p ~/.config/google-chrome/Default --bookmarks
+
+# Everything as JSON
+browsex chrome -p ~/.config/google-chrome/Default --all -f json
+
+# Passwords and history as CSV
+browsex chrome -p ~/.config/google-chrome/Default --passwords --history -f csv
+
+# Windows example
+browsex chrome -p "%LOCALAPPDATA%\Google\Chrome\User Data\Default" --all
+
+# Cross-platform: Decrypt Windows profile on Linux (requires DPAPI masterkey)
+browsex chrome -p "User Data/Default" --passwords -k 1a2b3c4d5e6f...64byte_hex
+
+# Save results to file
+browsex chrome -p ~/.config/google-chrome/Default --all -f json -o passwords.json
 ```
 
 ### Brave
 
 ```bash
-browspass brave -p /path/to/brave/profile
-browspass brave -p /path/to/brave/profile -f csv
+browsex brave -p /path/to/brave/profile --passwords --bookmarks
+browsex brave -p /path/to/brave/profile --all -f json -o brave_data.json
 ```
 
 ### Microsoft Edge
 
 ```bash
-browspass edge -p /path/to/edge/profile
-browspass edge -p /path/to/edge/profile -f json
+browsex edge -p /path/to/edge/profile --bookmarks
+browsex edge -p /path/to/edge/profile --all -f csv
 ```
 
 ### Opera
 
 ```bash
-browspass opera -p /path/to/opera/profile
-browspass opera -p /path/to/opera/profile -f csv
+browsex opera -p /path/to/opera/profile --history
+browsex opera -p /path/to/opera/profile --passwords --bookmarks
 ```
 
 ### Firefox
 
 ```bash
-browspass firefox -p /path/to/firefox/profile
-browspass firefox -p /path/to/firefox/profile -m "master_password" -f json
+# With master password
+browsex firefox -p /path/to/firefox/profile -m "master_password" --all
+
+# Without master password (bookmarks/history only)
+browsex firefox -p /path/to/firefox/profile --bookmarks --history
+
+# Everything as JSON saved to file
+browsex firefox -p /path/to/firefox/profile -m "pass" --all -f json -o firefox_data.json
+```
+
+### Auto-Detect Browser
+
+```bash
+# Auto-detect and extract passwords
+browsex auto -p /path/to/profile
+
+# Auto-detect and extract all data
+browsex auto -p /path/to/profile --all
+
+# Auto-detect with custom flags
+browsex auto -p /path/to/profile --passwords --bookmarks -f json
 ```
 
 ### General Options
 
 - `-p, --profile-path PATH`: Path to browser profile directory (required)
 - `-f, --format {text|json|csv}`: Output format (default: text)
+- `-o, --output FILE`: Output file path (default: print to stdout)
 - `-m, --master-password PASSWORD`: Firefox master password (if set)
+- `-k, --masterkey HEX`: DPAPI masterkey for cross-platform Windows profile decryption
+- `--passwords`: Extract passwords (default if no data flags specified)
+- `--bookmarks`: Extract bookmarks
+- `--history`: Extract browsing history
+- `--all`: Extract all data types
 - `-v, --verbose`: Enable verbose logging
 
 ## Finding Browser Profile Paths
@@ -117,9 +188,43 @@ browspass firefox -p /path/to/firefox/profile -m "master_password" -f json
 
 ## Output Formats
 
-- **text** (default): Human-readable output
-- **json**: Structured JSON for programmatic use
-- **csv**: Spreadsheet-compatible format
+All data types can be exported in multiple formats:
+
+- **text** (default): Human-readable output with section headers
+- **json**: Structured JSON with separate arrays for each data type
+- **csv**: Spreadsheet-compatible format (one CSV section per data type)
+
+### Example JSON Output
+
+```json
+{
+  "passwords": [
+    {
+      "origin_url": "https://example.com",
+      "username": "user@example.com",
+      "password": "secret123",
+      "date_created": 13324567890000000,
+      "times_used": 5
+    }
+  ],
+  "bookmarks": [
+    {
+      "url": "https://github.com",
+      "title": "GitHub",
+      "date_added": 13324567890000000,
+      "folder": "Bookmarks Bar"
+    }
+  ],
+  "history": [
+    {
+      "url": "https://google.com",
+      "title": "Google",
+      "visit_count": 42,
+      "last_visit_time": 13324567890000000
+    }
+  ]
+}
+```
 
 ## Security Warnings
 
@@ -140,14 +245,14 @@ browspass firefox -p /path/to/firefox/profile -m "master_password" -f json
 ```bash
 uv pip install -e ".[dev]"
 pytest tests/
-mypy browspass/
-ruff check browspass/
+mypy browsex/
+ruff check browsex/
 ```
 
 ## Architecture
 
 ```
-browspass/
+browsex/
 ├── models.py                  # Shared LoginEntry dataclass
 ├── crypto/
 │   ├── nss_crypto.py         # Firefox NSS crypto (3DES, AES, PBES2)
