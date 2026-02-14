@@ -3,17 +3,43 @@ __pycache__/
 *$py.class
 *.so
 .Python
+
+# Virtual environments
 .venv/
 venv/
 ENV/
 env/
+
+# Package build
 *.egg-info/
 dist/
 build/
+
+# Testing and linting
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
-*.log
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Environment
 .env
+*.log
+
+# Project specific
 tests/output/
+*.zip
+*.dmp
+*:Zone.Identifier

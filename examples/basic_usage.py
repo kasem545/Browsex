@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Example: Programmatic usage of browspass library."""
+"""Example: Programmatic usage of browsex library."""
 
 from pathlib import Path
 
-from browspass.browsers import ChromeDecryptor, FirefoxDecryptor
+from browsex.browsers import Chrome, FirefoxDecryptor
 
 firefox_profile = Path.home() / ".mozilla/firefox/xxxxxxxx.default-release"
 
@@ -18,7 +18,7 @@ if firefox_profile.exists():
 chrome_profile = Path.home() / ".config/google-chrome/Default"
 
 if chrome_profile.exists():
-    decryptor = ChromeDecryptor(chrome_profile)
+    decryptor = Chrome(chrome_profile)
     logins = decryptor.extract_logins()
 
     print(f"\nFound {len(logins)} Chrome logins")
