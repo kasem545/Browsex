@@ -42,19 +42,15 @@ def decrypt_3des_cbc(
 def _try_decrypt_v10_format(
     data: bytes, password: bytes, global_salt: bytes
 ) -> tuple[bytes, str] | None:
-    """Try to decrypt modern Firefox v10/v11 AES-GCM format.
-
-    Format: [v10][12-byte nonce][ciphertext][16-byte tag]
-    """
-    if len(data) < 29:  # 4 (v10) + 12 (nonce) + 1 (min ciphertext) + 16 (tag)
+    if len(data) < 28:
         return None
 
-    if data[:4] != b"v10\x00":
+    if data[:3] not in (b"v10", b"v11"):
         return None
 
     try:
-        nonce = data[4:16]
-        ciphertext_and_tag = data[16:]
+        nonce = data[3:15]
+        ciphertext_and_tag = data[15:]
 
         if len(ciphertext_and_tag) < 16:
             return None
@@ -68,10 +64,10 @@ def _try_decrypt_v10_format(
         cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
         plaintext = cipher.decrypt_and_verify(ciphertext, tag)
 
-        logger.debug("Successfully decrypted v10 format")
+        logger.debug("Successfully decrypted v10/v11 format")
         return plaintext, "v10-aes-gcm"
     except Exception as e:
-        logger.debug("v10 format decryption failed: %s", e)
+        logger.debug("v10/v11 format decryption failed: %s", e)
         return None
 
 
@@ -109,12 +105,21 @@ def _try_decrypt_direct_aes_gcm(
 def decrypt_pbe(
     asn1_data: bytes, password: bytes, global_salt: bytes
 ) -> tuple[bytes, str]:
+    result = _try_decrypt_v10_format(asn1_data, password, global_salt)
+    if result:
+        return result
+
     try:
         decoded = der_decoder.decode(asn1_data)[0]
         oid = str(decoded[0][0][0])
     except Exception as e:
-        logger.debug("ASN.1 decoding failed: %s. Trying alternative formats.", e)
-        oid = None
+        logger.debug("ASN.1 decoding failed: %s", e)
+        logger.warning(
+            f"All decryption attempts failed for PBE data. "
+            f"Data length: {len(asn1_data)} bytes, "
+            f"First 16 bytes: {asn1_data[:16].hex()}"
+        )
+        raise ValueError("Unable to decrypt PBE data: ASN.1 decoding failed") from e
 
     if oid == OID_PBE_SHA1_3DES:
         entry_salt = decoded[0][0][1][0].asOctets()
@@ -140,31 +145,34 @@ def decrypt_pbe(
         plaintext = cipher.decrypt(ciphertext)
         return plaintext, oid
 
-    if oid and oid not in (OID_PBE_SHA1_3DES, OID_PBES2):
-        logger.debug("Unrecognized OID: %s. Trying v10 format.", oid)
-
-    result = _try_decrypt_v10_format(asn1_data, password, global_salt)
-    if result:
-        return result
-
-    raise ValueError(
-        f"Unsupported PBE algorithm: {oid or 'unknown'}. "
-        f"Data length: {len(asn1_data)} bytes. "
+    logger.warning(
+        f"All decryption attempts failed for PBE data. "
+        f"OID: {oid}, "
+        f"Data length: {len(asn1_data)} bytes, "
         f"First 16 bytes: {asn1_data[:16].hex()}"
     )
+    raise ValueError(f"Unsupported PBE algorithm: {oid}")
 
 
 def decrypt_login_field(encrypted_data: bytes, master_key: bytes) -> str:
+    result = _try_decrypt_direct_aes_gcm(encrypted_data, master_key)
+    if result:
+        plaintext, _ = result
+        return plaintext.decode("utf-8", errors="replace")
+
     try:
         decoded = der_decoder.decode(encrypted_data)[0]
         oid = str(decoded[0][1][0])
         iv = decoded[0][1][1].asOctets()
         ciphertext = decoded[0][2].asOctets()
     except Exception as e:
-        logger.debug("ASN.1 decoding failed: %s. Trying alternative formats.", e)
-        oid = None
-        iv = None
-        ciphertext = None
+        logger.debug("ASN.1 decoding failed: %s", e)
+        logger.warning(
+            f"All decryption attempts failed for login field. "
+            f"Data length: {len(encrypted_data)} bytes, "
+            f"First 16 bytes: {encrypted_data[:16].hex()}"
+        )
+        raise ValueError("Unable to decrypt login field: ASN.1 decoding failed") from e
 
     if oid == OID_3DES_CBC:
         key = master_key[:24]
@@ -178,13 +186,10 @@ def decrypt_login_field(encrypted_data: bytes, master_key: bytes) -> str:
         plaintext = unpad(cipher.decrypt(ciphertext), AES.block_size)
         return plaintext.decode("utf-8", errors="replace")
 
-    result = _try_decrypt_direct_aes_gcm(encrypted_data, master_key)
-    if result:
-        plaintext, _ = result
-        return plaintext.decode("utf-8", errors="replace")
-
-    raise ValueError(
-        f"Unsupported login encryption algorithm: {oid or 'unknown'}. "
-        f"Data length: {len(encrypted_data)} bytes. "
+    logger.warning(
+        f"All decryption attempts failed for login field. "
+        f"OID: {oid}, "
+        f"Data length: {len(encrypted_data)} bytes, "
         f"First 16 bytes: {encrypted_data[:16].hex()}"
     )
+    raise ValueError(f"Unsupported login encryption algorithm: {oid}")
