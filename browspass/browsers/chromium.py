@@ -18,6 +18,7 @@ from browspass.crypto.os_crypt import (
     get_windows_key,
 )
 from browspass.models import BookmarkEntry, HistoryEntry, LoginEntry
+from browspass.utils import find_chrome_local_state, find_file
 
 logger = logging.getLogger(__name__)
 
@@ -32,23 +33,51 @@ class ChromiumDecryptor(ABC):
     def __init__(self, profile_path: Path) -> None:
         self.profile_path = profile_path
         self._decryption_key: bytes | None = None
+        self._login_data_path: Path | None = None
+        self._local_state_path: Path | None = None
+        self._bookmarks_path: Path | None = None
+        self._history_path: Path | None = None
         self._validate_profile()
 
     @property
     def login_data_path(self) -> Path:
-        return self.profile_path / "Login Data"
+        if self._login_data_path is None:
+            found = find_file(self.profile_path, "Login Data", max_depth=3)
+            if found:
+                self._login_data_path = found
+            else:
+                self._login_data_path = self.profile_path / "Login Data"
+        return self._login_data_path
 
     @property
     def local_state_path(self) -> Path:
-        return self.profile_path.parent / "Local State"
+        if self._local_state_path is None:
+            found = find_chrome_local_state(self.profile_path)
+            if found:
+                self._local_state_path = found
+            else:
+                self._local_state_path = self.profile_path.parent / "Local State"
+        return self._local_state_path
 
     @property
     def bookmarks_path(self) -> Path:
-        return self.profile_path / "Bookmarks"
+        if self._bookmarks_path is None:
+            found = find_file(self.profile_path, "Bookmarks", max_depth=3)
+            if found:
+                self._bookmarks_path = found
+            else:
+                self._bookmarks_path = self.profile_path / "Bookmarks"
+        return self._bookmarks_path
 
     @property
     def history_path(self) -> Path:
-        return self.profile_path / "History"
+        if self._history_path is None:
+            found = find_file(self.profile_path, "History", max_depth=3)
+            if found:
+                self._history_path = found
+            else:
+                self._history_path = self.profile_path / "History"
+        return self._history_path
 
     @property
     @abstractmethod

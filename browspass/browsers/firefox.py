@@ -11,6 +11,7 @@ import orjson
 
 from browspass.crypto.nss_crypto import decrypt_login_field, decrypt_pbe
 from browspass.models import BookmarkEntry, HistoryEntry, LoginEntry
+from browspass.utils import find_file
 
 logger = logging.getLogger(__name__)
 
@@ -23,19 +24,40 @@ class FirefoxDecryptor:
         self.profile_path = profile_path
         self.master_password = master_password.encode("utf-8")
         self._master_key: bytes | None = None
+        self._key_db_path: Path | None = None
+        self._logins_path: Path | None = None
+        self._places_path: Path | None = None
         self._validate_profile()
 
     @property
     def key_db_path(self) -> Path:
-        return self.profile_path / "key4.db"
+        if self._key_db_path is None:
+            found = find_file(self.profile_path, "key4.db", max_depth=3)
+            if found:
+                self._key_db_path = found
+            else:
+                self._key_db_path = self.profile_path / "key4.db"
+        return self._key_db_path
 
     @property
     def logins_path(self) -> Path:
-        return self.profile_path / "logins.json"
+        if self._logins_path is None:
+            found = find_file(self.profile_path, "logins.json", max_depth=3)
+            if found:
+                self._logins_path = found
+            else:
+                self._logins_path = self.profile_path / "logins.json"
+        return self._logins_path
 
     @property
     def places_path(self) -> Path:
-        return self.profile_path / "places.sqlite"
+        if self._places_path is None:
+            found = find_file(self.profile_path, "places.sqlite", max_depth=3)
+            if found:
+                self._places_path = found
+            else:
+                self._places_path = self.profile_path / "places.sqlite"
+        return self._places_path
 
     def _validate_profile(self) -> None:
         if not self.profile_path.exists():
