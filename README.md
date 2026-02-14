@@ -27,8 +27,8 @@ Comprehensive multi-browser password extraction and decryption utility supportin
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/Extract-Browsex.git
-cd Extract-Browsex
+git clone https://github.com/kasem545/Browsex.git
+cd Browsex
 
 # Create virtual environment
 uv venv
