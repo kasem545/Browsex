@@ -15,6 +15,29 @@ from browspass.models import LoginEntry
 logger = logging.getLogger(__name__)
 
 
+def detect_browser_from_path(profile_path: Path) -> str | None:
+    """Auto-detect browser type from profile path structure."""
+    path_str = str(profile_path).lower()
+
+    if "firefox" in path_str or ".mozilla" in path_str:
+        return "firefox"
+    if "chrome" in path_str and "google" in path_str:
+        return "chrome"
+    if "brave" in path_str:
+        return "brave"
+    if "edge" in path_str or "microsoft" in path_str:
+        return "edge"
+    if "opera" in path_str:
+        return "opera"
+
+    if (profile_path / "key4.db").exists() and (profile_path / "logins.json").exists():
+        return "firefox"
+    if (profile_path / "Login Data").exists():
+        return "chrome"
+
+    return None
+
+
 def setup_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
@@ -116,7 +139,30 @@ def main() -> int:
         "-v", "--verbose", action="store_true", help="Enable verbose logging"
     )
 
-    subparsers = parser.add_subparsers(dest="browser", required=True)
+    subparsers = parser.add_subparsers(dest="browser", required=False)
+
+    auto_parser = subparsers.add_parser(
+        "auto", help="Auto-detect browser and extract passwords"
+    )
+    auto_parser.add_argument(
+        "-p",
+        "--profile-path",
+        required=True,
+        help="Path to browser profile directory",
+    )
+    auto_parser.add_argument(
+        "-m",
+        "--master-password",
+        default="",
+        help="Master password (if set)",
+    )
+    auto_parser.add_argument(
+        "-f",
+        "--format",
+        choices=["text", "json", "csv"],
+        default="text",
+        help="Output format (default: text)",
+    )
 
     firefox_parser = subparsers.add_parser("firefox", help="Extract Firefox passwords")
     firefox_parser.add_argument(
@@ -165,6 +211,18 @@ def main() -> int:
 
     args = parser.parse_args()
     setup_logging(args.verbose)
+
+    if args.browser == "auto":
+        detected = detect_browser_from_path(Path(args.profile_path))
+        if not detected:
+            logger.error("Could not auto-detect browser from profile path")
+            return 1
+        args.browser = detected
+        logger.info("Auto-detected browser: %s", detected)
+
+    if not args.browser:
+        parser.print_help()
+        return 1
 
     if args.browser == "firefox":
         return handle_firefox(args)
