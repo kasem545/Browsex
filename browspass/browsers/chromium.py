@@ -32,6 +32,7 @@ class ChromiumDecryptor(ABC):
     def __init__(self, profile_path: Path) -> None:
         self.profile_path = profile_path
         self._decryption_key: bytes | None = None
+        self._validate_profile()
 
     @property
     def login_data_path(self) -> Path:
@@ -53,6 +54,27 @@ class ChromiumDecryptor(ABC):
     @abstractmethod
     def keychain_service_name(self) -> str:
         """Return the macOS Keychain service name for this browser."""
+
+    def _validate_profile(self) -> None:
+        if not self.profile_path.exists():
+            logger.warning("Profile directory not found: %s", self.profile_path)
+            return
+
+        if not self.profile_path.is_dir():
+            logger.warning("Profile path is not a directory: %s", self.profile_path)
+            return
+
+        if not self.login_data_path.exists():
+            logger.debug(
+                "Login Data not found at %s (will fail during extraction if needed)",
+                self.login_data_path,
+            )
+
+        if not self.local_state_path.exists():
+            logger.debug(
+                "Local State not found at %s (may affect decryption on v80+)",
+                self.local_state_path,
+            )
 
     def _get_decryption_key(self) -> bytes:
         system = platform.system()
@@ -110,7 +132,10 @@ class ChromiumDecryptor(ABC):
 
     def extract_logins(self) -> list[LoginEntry]:
         if not self.login_data_path.exists():
-            raise FileNotFoundError(f"Login Data not found at {self.login_data_path}")
+            raise FileNotFoundError(
+                f"Login Data not found at {self.login_data_path}\n"
+                f"Cannot extract passwords without Login Data file."
+            )
 
         with tempfile.NamedTemporaryFile(delete=False) as temp_file:
             temp_db_path = temp_file.name

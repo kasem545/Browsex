@@ -23,6 +23,7 @@ class FirefoxDecryptor:
         self.profile_path = profile_path
         self.master_password = master_password.encode("utf-8")
         self._master_key: bytes | None = None
+        self._validate_profile()
 
     @property
     def key_db_path(self) -> Path:
@@ -36,11 +37,33 @@ class FirefoxDecryptor:
     def places_path(self) -> Path:
         return self.profile_path / "places.sqlite"
 
+    def _validate_profile(self) -> None:
+        if not self.profile_path.exists():
+            logger.warning("Profile directory not found: %s", self.profile_path)
+            return
+
+        if not self.profile_path.is_dir():
+            logger.warning("Profile path is not a directory: %s", self.profile_path)
+            return
+
+        if not self.key_db_path.exists():
+            logger.debug(
+                "key4.db not found at %s (will fail during extraction if needed)",
+                self.key_db_path,
+            )
+
+        if not self.logins_path.exists():
+            logger.debug(
+                "logins.json not found at %s (will fail during extraction if needed)",
+                self.logins_path,
+            )
+
     def _extract_master_key(self) -> bytes:
         if not self.key_db_path.exists():
             raise FileNotFoundError(
-                f"key4.db not found at {self.key_db_path}. "
-                "This tool requires Firefox 58+ (key4.db format)."
+                f"key4.db not found at {self.key_db_path}\n"
+                f"Cannot decrypt passwords without key4.db file.\n"
+                f"This tool requires Firefox 58+ (key4.db format)."
             )
 
         with sqlite3.connect(self.key_db_path) as conn:
@@ -116,7 +139,10 @@ class FirefoxDecryptor:
 
     def extract_logins(self) -> list[LoginEntry]:
         if not self.logins_path.exists():
-            raise FileNotFoundError(f"logins.json not found at {self.logins_path}")
+            raise FileNotFoundError(
+                f"logins.json not found at {self.logins_path}\n"
+                f"Cannot extract passwords without logins.json file."
+            )
 
         data = orjson.loads(self.logins_path.read_bytes())
         logins = data.get("logins", [])
