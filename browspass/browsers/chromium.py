@@ -110,17 +110,28 @@ class ChromiumDecryptor(ABC):
         if system == "Windows":
             key = get_windows_key(self.local_state_path)
             if not key:
-                raise ValueError("Failed to extract Windows DPAPI key")
+                raise ValueError(
+                    "Failed to extract Windows DPAPI key. "
+                    "Ensure you have access to the user's DPAPI master key."
+                )
             return key
         elif system == "Darwin":
             key = get_macos_key(self.keychain_service_name)
             if not key:
-                raise ValueError("Failed to extract macOS Keychain key")
+                raise ValueError(
+                    "Failed to extract macOS Keychain key. "
+                    "Install keyring: pip install keyring"
+                )
             return key
         elif system == "Linux":
             key = get_linux_key(self.keychain_service_name, self.local_state_path)
             if not key:
-                raise ValueError("Failed to extract Linux libsecret key")
+                raise ValueError(
+                    "Failed to extract Linux decryption key.\n"
+                    "Chrome v80+ requires secretstorage to decrypt passwords.\n"
+                    "Install with: pip install secretstorage\n"
+                    'Or install all dependencies: pip install -e ".[linux]"'
+                )
             return key
         else:
             raise NotImplementedError(f"Unsupported platform: {system}")
