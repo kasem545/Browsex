@@ -33,7 +33,36 @@ def detect_browser_from_path(profile_path: Path) -> str | None:
     if (profile_path / "key4.db").exists() and (profile_path / "logins.json").exists():
         return "firefox"
     if (profile_path / "Login Data").exists():
-        return "chrome"
+        if "Default" in [p.name for p in profile_path.parents]:
+            return "chrome"
+        if (profile_path.parent / "Local State").exists():
+            if "brave" in str(profile_path.parent).lower():
+                return "brave"
+            if "edge" in str(profile_path.parent).lower():
+                return "edge"
+            if "opera" in str(profile_path.parent).lower():
+                return "opera"
+            return "chrome"
+
+    if (profile_path / "Local State").exists() and (
+        profile_path / "Default" / "Login Data"
+    ).exists():
+        logger.warning(
+            "Detected Chrome User Data directory. Please specify a profile directory:"
+        )
+        profiles = [
+            p.name
+            for p in profile_path.iterdir()
+            if p.is_dir()
+            and (p / "Login Data").exists()
+            and p.name not in ["extensions_crx_cache", "component_crx_cache"]
+        ]
+        if profiles:
+            logger.warning("Available profiles: %s", ", ".join(profiles))
+            logger.warning(
+                "Example: browspass chrome -p '%s/%s'", profile_path, profiles[0]
+            )
+        return None
 
     return None
 
