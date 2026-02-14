@@ -407,7 +407,8 @@ def main() -> int:
             "-k",
             "--masterkey",
             default=None,
-            help="DPAPI masterkey (64-byte hex) for cross-platform decryption of Windows profiles",
+            help="DPAPI masterkey (64-byte hex) for cross-platform Windows profile decryption. "
+            "Optional for native Linux/macOS profiles (uses OS keyring automatically).",
         )
         browser_parser.add_argument(
             "-o",
@@ -442,18 +443,6 @@ def main() -> int:
             "No data type specified. Use --passwords, --bookmarks, --history, or --all"
         )
         return 1
-
-    if args.browser in ("chrome", "brave", "edge", "opera"):
-        masterkey = getattr(args, "masterkey", None)
-        if (args.passwords or args.all) and not masterkey:
-            logger.error(
-                "%s password extraction requires -k/--masterkey flag for decryption",
-                args.browser.capitalize(),
-            )
-            logger.error(
-                "Use --bookmarks or --history only (no -k needed), or provide -k for passwords"
-            )
-            return 1
 
     if args.browser == "firefox":
         return handle_firefox(args)

@@ -55,12 +55,13 @@ uv pip install -e ".[windows,macos,linux]"
 ### ⚠️ Important Requirements
 
 **Chromium Browsers (Chrome, Brave, Edge, Opera)**:
-- Password extraction **requires** `-k/--masterkey` flag with 64-byte hex DPAPI masterkey
-- Bookmarks and history do NOT require `-k` flag
-- See [CROSS_PLATFORM_DPAPI.md](CROSS_PLATFORM_DPAPI.md) for masterkey extraction methods
+- **Native Linux/macOS**: Password extraction works automatically (install `secretstorage` on Linux)
+- **Windows Profiles on Linux/macOS**: Requires `-k/--masterkey` flag with 64-byte hex DPAPI masterkey
+- **Bookmarks and history**: Never require `-k` flag (plaintext data)
+- See [CROSS_PLATFORM_DPAPI.md](CROSS_PLATFORM_DPAPI.md) for cross-platform masterkey extraction
 
 **Firefox**:
-- No `-k` flag needed (uses NSS crypto)
+- No `-k` flag needed (uses NSS crypto, works cross-platform)
 - Master password required if set: `-m "password"`
 
 **All Browsers**:
@@ -70,10 +71,10 @@ uv pip install -e ".[windows,macos,linux]"
 
 Extract different types of data from browsers:
 
-- `--passwords` - Extract saved passwords (**requires -k for Chromium browsers**)
+- `--passwords` - Extract saved passwords (**optional -k for cross-platform scenarios**)
 - `--bookmarks` - Extract bookmarks (no -k needed)
 - `--history` - Extract browsing history (no -k needed)
-- `--all` - Extract all data types (**requires -k for Chromium browsers**)
+- `--all` - Extract all data types (**optional -k for cross-platform scenarios**)
 
 **You can combine multiple flags:**
 
@@ -81,38 +82,33 @@ Extract different types of data from browsers:
 # Bookmarks and history (no -k needed)
 browsex chrome -p /path --bookmarks --history
 
-# Passwords and bookmarks (requires -k for Chrome)
-browsex chrome -p /path --passwords --bookmarks -k <masterkey>
+# Passwords on native OS (no -k needed if secretstorage installed on Linux)
+browsex chrome -p ~/.config/google-chrome/Default --passwords
 
-# Extract only history (no -k needed)
-browsex firefox -p /path --history
+# Passwords from Windows profile on Linux (requires -k)
+browsex chrome -p "Windows/Chrome/Default" --passwords -k <masterkey>
 ```
 
 ### Chrome
 
-**IMPORTANT**: Chrome password extraction requires `-k/--masterkey` flag for decryption.
+**Linux/macOS Native Profiles**: No `-k` flag needed (install `secretstorage` on Linux)  
+**Windows Profiles on Linux/macOS**: Requires `-k` masterkey flag
 
 ```bash
-# Bookmarks only (no -k required)
+# Native Linux Chrome (no -k needed)
+browsex chrome -p ~/.config/google-chrome/Default --passwords
+
+# Bookmarks only (always works, no -k)
 browsex chrome -p ~/.config/google-chrome/Default --bookmarks
 
-# History only (no -k required)
-browsex chrome -p ~/.config/google-chrome/Default --history
+# Windows profile on Linux (requires -k)
+browsex chrome -p "Windows/User Data/Default" --passwords -k 1a2b3c4d...64byte_hex
 
-# Passwords (requires -k masterkey)
-browsex chrome -p ~/.config/google-chrome/Default --passwords -k <64_byte_hex_masterkey>
-
-# Everything including passwords (requires -k)
-browsex chrome -p ~/.config/google-chrome/Default --all -k <masterkey>
-
-# Cross-platform: Decrypt Windows profile on Linux
-browsex chrome -p "User Data/Default" --passwords -k 1a2b3c4d5e6f...64byte_hex
-
-# Save results to file
-browsex chrome -p ~/.config/google-chrome/Default --all -k <masterkey> -f json -o passwords.json
+# Save to file
+browsex chrome -p ~/.config/google-chrome/Default --all -f json -o passwords.json
 ```
 
-**Note**: Bookmarks and history do NOT require `-k` flag. Only passwords require decryption keys.
+**Note**: The `-k` flag is **only needed for cross-platform scenarios** (Windows profiles on Linux/macOS). Native profile decryption works automatically.
 
 ### Brave
 
